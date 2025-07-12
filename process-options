@@ -1,0 +1,415 @@
+#!/usr/bin/perl
+
+=head1 NAME
+
+C<process-options> - prints bash commands to handle option arguments
+
+=head1 SYNOPSIS
+
+  . <(process-options $0)   # (from within a bash script)
+
+=head1 DESCRIPTION
+
+When C<process-options> is sourced from a bash script, it:
+
+=over 4
+
+=item 1.
+
+Extracts the comments from the source of the shell script from which it has been
+invoked, and stores that into a C<help> variable (which is in the scope of the
+invoking script).
+
+=item 2.
+
+Uses the I<Options> section of the help comments to build an C<options>
+associative array.  The keys of this array are of the form of
+I<< <short option character><field name> >>, where I<< <field name> >> is one
+of:
+
+=over 8
+
+=item C<argument>
+
+The argument accepted by this option.  Options can take a maximum of one
+argument.
+
+=item C<description>
+
+An explanation of the option.
+
+=item C<long>
+
+The long name for this option.
+
+=item C<short>
+
+The short (single-character) name for this option.
+
+=item C<value>
+
+The current value of the option.  For switch options, this will be a string
+("true" or "false") or unset (which is equivalent to "false").
+
+=back
+
+E.g., C<options[xvalue]> references the value for the option C<x>.
+
+
+=item 3.
+
+Using C<getopt>, strips the option arguments from C<$@>, using them to populate
+the respective C<?value> fields in the C<options> associative array.
+
+=item 4.
+
+Provides an C<option> function for convinient getting and setting of the
+C<options> array. Its behaviour varies depending on the number of arguments it
+receives:
+
+=over 8
+
+=item C<option> (with no arguments)
+
+Displays the keys of C<options>.
+
+=item C<< option <opt-char> >> (e.g., C<option x>)
+
+Displays the current value of C<< options[<opt-char>value] >>.  If C<options>
+does not contain the key C<< <opt-char>value >>, "false" is displayed for switch
+options (i.e., those that don't take an argument) and nothing is displayed for
+options that do take an argument.
+
+=item C<< option <opt-char> <field> >> (e.g., C<option x description>)
+
+Displays the current value of C<< options[<opt-char><field>] >>.
+
+=item C<< option <opt-char> <field> <value>... >>
+
+Sets C<< options[<opt-char><field>] >> to C<< <value> >>.  If there are more
+than three arguments, the final ones are concatenated into C<< <value> >>.
+
+=back
+
+=back
+
+=head3 Expected format of the comment block
+
+This script scans for comment lines that either have a hash symbol ("#")
+followed by a space, or a hash symbol as the only character on the line.  The
+"help" comment block of the file being scanned starts at the first of these
+comment lines, and continues until the first empty line (or line containing only
+spaces or space-like characters).  The "options" section start after a line
+starting with C<# Options:>.  Each option desciption has the form:
+
+  #  -<short name>  --<long name>  <argument>  <description>
+  #                                            Default: <default>
+
+The argument and the default line are optional.  The description may span
+multiple lines.
+
+=head3 Passing arguments
+
+When the options are sent to the bash script:
+
+=over
+
+=item
+
+Short options that don't take arguments may be grouped (C<-ab> is equivalent to
+C<-a -b>).
+
+=item
+
+Long names are always prefixed with two hyphens, and cannot be grouped.
+
+=item
+
+C<--> causes all following arguments to be treated as position parameters, not
+as options, even if they start with a hyphen.
+
+=back
+
+=head3 Example script - C<process-options-example.sh>
+
+  #!/usr/bin/bash
+
+  # process-options-example.sh - shows how to use process-options
+  #
+  # Usage:  .  process-options-example.sh
+  #
+  # This is a bash script that examples the use of process-options.
+  #
+  # Options:
+  #   -a --Aa x    The -a (or --Aa) option takes a parameter "x".
+  #                Default: Default value for a
+  #   -b --Bb      The -b/--Bb switch does not take any parameters, but it does
+  #                have a rather long description.
+
+  . <(process-options $0)
+
+  echo "'a' is set to '$(option a)'"
+  if $(option b)
+  then echo "'b' is set"
+  else echo "'b' is not set"
+  fi
+
+  option a value new value
+  echo "'a' is now set to '$(option a)'"
+  option
+  echo "The positional arguments are: $@"
+
+=head3 Output
+
+  > ./process-options-example.sh -a 1 one --Bb two
+  'a' is set to '1'
+  'b' is set
+  'a' is now set to 'new value'
+  aargument adescription along ashort avalue bdescription blong bshort bvalue
+  The positional arguments are: one two
+
+  > ./process-options-example.sh -- -b two
+  'a' is set to 'Default value for a'
+  'b' is not set
+  'a' is now set to 'new value'
+  aargument adescription along ashort avalue bdescription blong bshort
+  The positional arguments are: -b two
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--generate-documentation>
+
+Generate documentation files for this script.  Both an HTML file
+(I<process-options.html>) and a Markdown file (I<process-options.md>) are
+generated.
+
+=item B<-h,--help>
+
+Print usage information, then exit.
+
+=item B<--man>
+
+Print this script's full documentation, then exit.
+
+=back
+
+=head1 CAVEATS
+
+The calling script must be invoked as a bash executable, not called with the
+C<source> command.
+
+=head1 SEE ALSO
+
+=over
+
+=item
+
+L<getopt(1)|https://man7.org/linux/man-pages/man1/getopt.1.html>
+
+=back
+
+=head1 AUTHORS
+
+=over
+
+=item
+
+L<Warwick Allen|https://github.com/Warwick-Allen>
+
+=back
+
+=cut
+
+use warnings;
+use strict;
+use Getopt::Long qw(GetOptions);
+use Pod::Simple::XHTML;
+use Pod::Usage qw(pod2usage);
+
+## Parse options
+my %opt;
+GetOptions(\%opt, qw/
+  generate-documentation
+  h|help
+  man
+/) or pod2usage(2);
+
+$opt{h  } and pod2usage(-exitval => 0, -verbose => 1);
+$opt{man} and pod2usage(-exitval => 0, -verbose => 2);
+$\ = "\n";
+$opt{'generate-documentation'} and do {
+  my $psx = Pod::Simple::XHTML->new;
+  $psx->output_string(\my $html);
+  $psx->parse_file($0);
+  $_ = $0; s/((?<=.)\.{,5}|)$/.html/;
+  open OUT, '>', $_ or die "Cannot open '$_': $!";
+  print OUT $html;
+  close OUT;
+  print "Generated HTML file:\n$_";
+  exit 0;
+};
+undef $\, pod2usage(
+  -exitval => 2,
+  -message => 'Please supply the path of the parent script.',
+  -verbose => 1,
+) unless @ARGV;
+
+my @option_fields = qw/
+    short
+    long
+    argument
+    description
+    value
+  /;
+my $is_comment;     # True if a comment line has been seen.
+my $is_option;      # True if the Options heading has been seen.
+my $help = '';      # The extracted help message.
+my @options;
+
+open IN, "@ARGV" or die "Cannot open '@ARGV': $!";
+my $option;
+my $indent = 0;
+while (<IN>) {
+  $is_comment && /^\s*$/ and last;  # Empty line after comments = end of help
+  $is_comment = /^#(?: |$)(.*)/ or next;    # Move on if this isn't a comment
+  $_ = $1;                          # Drop the initial '# '
+  $help .= $_.$\;                   # Build up the help string, incl new lines
+  $is_option = /^\s*Options:/ and next unless $is_option;
+  /^(\s*
+    - (?P<short>      \w          )  \s+
+    --(?P<long>       [\w-]+      )  \s+
+      (?P<argument>   [a-z][\w-]* )? \s+
+     )(?<description> \S.*        )
+  /x and do {
+    $indent = length $1;
+    push @options, {};
+    $option = $options[-1];
+    $option->{$_} = $+{$_} for keys %+;
+    next;
+  };
+  /^\s* Default: \s* (\S.*) /x and do {
+    $option->{'value'} = $1;
+    next;
+  };
+  /^\s{$indent} (.*) /x and do {
+    $option->{'description'} .= $\.$1;
+    next;
+  };
+}
+
+# Define the help variable
+$help =~ s/\\/\\\\/sg;
+$help =~ s/'/\\x27/sg;
+print "help='$help'";
+
+# Define the options associative array
+print "declare -A options";
+
+# Build the getopt string and populate the options associative array
+my (@short_options, @long_options);
+for $option (@options) {
+  # for the getopt string
+  my $arg_indicator = defined $option->{'argument'} ? ':' : '';
+  push @short_options, $option->{'short'}.$arg_indicator;
+  push @long_options , $option->{'long' }.$arg_indicator;
+
+  # options associative array
+  for my $field (@option_fields) {
+    next unless exists $option->{$field};
+    local $_ = $option->{$field};
+    s/\\/\\\\/sg;
+    s/\n/\\n/sg;
+    s/'/\\x27/sg;
+    print qq{options[$option->{'short'}$field]='$_'};
+  }
+}
+print <<'SH';
+option() {
+  case "$#" in
+    0)
+      echo ${!options[@]} | tr ' ' '\n' | sort | xargs echo
+      ;;
+    1)
+      if [[ -v options[${1}value] ]]; then
+        echo ${options[${1}value]}
+      else
+        if [[ ! -v options[${1}argument] ]]; then
+          echo false
+        fi
+      fi
+      ;;
+    2)
+      echo ${options[$1$2]}
+      ;;
+    *)
+      options[$1$2]="${@:3}"
+  esac
+}
+SH
+
+$_ = '-o'.join(',', @short_options).' --long '.join(',', @long_options);
+print 'eval set -- $(getopt '.$_.' -- "$@")';
+print <<SH;
+while [ \$# -gt 0 ]
+do
+  opt="\$1"
+  shift
+  case "\$opt" in
+SH
+for $option (@options) {
+  my $key = $option->{'short'};
+  my $action;
+  if ($key eq 'h') {
+    $action = <<SH;
+      cat <<HELP
+$help
+HELP
+      exit 0
+SH
+  }
+  elsif (exists $option->{'argument'}) {
+    $action = <<SH;
+      options['${key}value']="\$1"
+      shift
+SH
+  }
+  else {
+    $action = <<SH;
+      options['${key}value']=true
+SH
+  }
+  print <<SH;
+    '-$key'|'--$option->{'long'}')
+$action
+      ;;
+SH
+}
+print <<SH;
+    --)
+      break
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+done
+SH
+
+=head1 COPYRIGHT AND LICENCE
+
+Copyright (c) 2025 Warwick Allen
+
+This is free software; you can redistribute it and/or modify it under the same
+terms as the Perl 5 programming language system itself.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+=cut
+
