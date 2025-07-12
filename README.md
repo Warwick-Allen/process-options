@@ -165,6 +165,10 @@ as options, even if they start with a hyphen.
 
     Print this script's full documentation, then exit.
 
+- **--version**
+
+    Print this script's version, then exit.
+
 # CAVEATS
 
 The calling script must be invoked as a bash executable, not called with the

@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 
+our $VERSION = '0.0.1';
+
 =head1 NAME
 
 C<process-options> - prints bash commands to handle option arguments
@@ -209,6 +211,10 @@ Print usage information, then exit.
 
 Print this script's full documentation, then exit.
 
+=item B<--version>
+
+Print this script's version, then exit.
+
 =back
 
 =head1 CAVEATS
@@ -231,10 +237,12 @@ GetOptions(\%opt, qw/
   generate-documentation:s
   h|help
   man
+  version
 /) or pod2usage(2);
 
 $opt{h  } and pod2usage(-exitval => 0, -verbose => 1);
 $opt{man} and pod2usage(-exitval => 0, -verbose => 2);
+$opt{version} and print "process-options v$VERSION\n" and exit;
 exists $opt{'generate-documentation'} and do {
   my @files_generated;
   my $write_doc_file = sub {
