@@ -179,11 +179,27 @@ as options, even if they start with a hyphen.
 
 =over 4
 
-=item B<--generate-documentation>
+=item B<--generate-documentation [type]>
 
-Generate documentation files for this script.  Both an HTML file
-(I<process-options.html>) and a Markdown file (I<process-options.md>) are
-generated.
+Generate a I<type> documentation file for this script, where I<type> is one of:
+
+=over 8
+
+=item html
+
+Creates an HTML file, (I<process-options.html>).
+
+=item markdown
+
+Creates a Markdown file (I<process-options.md>).
+
+=item all
+
+Creates both of the above files.
+
+=back
+
+Not specifying I<type> is the same as specifying "all".
 
 =item B<-h,--help>
 
@@ -205,37 +221,55 @@ C<source> command.
 use warnings;
 use strict;
 use Getopt::Long qw(GetOptions);
-use Pod::Simple::XHTML;
 use Pod::Usage qw(pod2usage);
+require Pod::Simple::XHTML;
+require Pod::Markdown::Github;
 
 ## Parse options
 my %opt;
 GetOptions(\%opt, qw/
-  generate-documentation
+  generate-documentation:s
   h|help
   man
 /) or pod2usage(2);
 
 $opt{h  } and pod2usage(-exitval => 0, -verbose => 1);
 $opt{man} and pod2usage(-exitval => 0, -verbose => 2);
-$\ = "\n";
-$opt{'generate-documentation'} and do {
-  my $psx = Pod::Simple::XHTML->new;
-  $psx->output_string(\my $html);
-  $psx->parse_file($0);
-  $_ = $0; s/((?<=.)\.{,5}|)$/.html/;
-  open OUT, '>', $_ or die "Cannot open '$_': $!";
-  print OUT $html;
-  close OUT;
-  print "Generated HTML file:\n$_";
-  exit 0;
+exists $opt{'generate-documentation'} and do {
+  my @files_generated;
+  my $write_doc_file = sub {
+    my $type = shift;
+    my $parser = shift;
+    my $content;
+    $parser->output_string(\$content);
+    $parser->parse_file($0);
+    $0 =~ m{^(?:\./)(.*?)(?:\.p[ml])?$};
+    my $out_fname = "$1.$type";
+    open OUT, '>', $out_fname or die "Cannot open '$out_fname': $!\n";
+    print OUT $content;
+    close OUT;
+    push @files_generated, $out_fname;
+  };
+  local $_ = $opt{'generate-documentation'} || 'all';
+  /^(html    |all)$/xi and $write_doc_file->('html', Pod::Simple::XHTML->new);
+  /^(markdown|all)$/xi and $write_doc_file->('md',   Pod::Markdown     ->new);
+  if (@files_generated) {
+    $\ = $, = "\n";
+    print 'Files generated:', map {s/^/  - /; $_} @files_generated;
+    exit 0;
+  }
+  else {
+    print STDERR "Invalid option for --generate-documentation: $_\n";
+    pod2usage(1);
+  }
 };
-undef $\, pod2usage(
+pod2usage(
   -exitval => 2,
   -message => 'Please supply the path of the parent script.',
   -verbose => 1,
 ) unless @ARGV;
 
+$\ = "\n";
 my @option_fields = qw/
     short
     long
