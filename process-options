@@ -6,7 +6,7 @@ C<process-options> - prints bash commands to handle option arguments
 
 =head1 SYNOPSIS
 
-  . <(process-options $0)   # (from within a bash script)
+  . <(process-options "$0")   # (from within a bash script)
 
 =head1 DESCRIPTION
 
@@ -136,17 +136,17 @@ as options, even if they start with a hyphen.
 
   # process-options-example.sh - shows how to use process-options
   #
-  # Usage:  .  process-options-example.sh
+  # Usage:  . process-options-example.sh [OPTIONS]
   #
   # This is a bash script that examples the use of process-options.
   #
   # Options:
-  #   -a --Aa x    The -a (or --Aa) option takes a parameter "x".
+  #   -a --Aa X    The -a (or --Aa) option takes a parameter "X".
   #                Default: Default value for a
   #   -b --Bb      The -b/--Bb switch does not take any parameters, but it does
   #                have a rather long description.
 
-  . <(process-options $0)
+  . <(process-options "$0")
 
   echo "'a' is set to '$(option a)'"
   if $(option b)
@@ -179,9 +179,9 @@ as options, even if they start with a hyphen.
 
 =over 4
 
-=item B<--generate-documentation [type]>
+=item B<--generate-documentation [TYPE]>
 
-Generate a I<type> documentation file for this script, where I<type> is one of:
+Generate a I<TYPE> documentation file for this script, where I<TYPE> is one of:
 
 =over 8
 
@@ -199,7 +199,7 @@ Creates both of the above files.
 
 =back
 
-Not specifying I<type> is the same as specifying "all".
+Not specifying I<TYPE> is the same as specifying "all".
 
 =item B<-h,--help>
 
