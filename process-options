@@ -91,6 +91,38 @@ than three arguments, the final ones are concatenated into C<< <value> >>.
 
 =back
 
+=item 5.
+
+Provides functions for handling options with multiple values:
+
+=over 8
+
+=item C<< option_array <opt-char> >>
+
+Displays all the values of C<< options[<opt-char>value] >>.
+
+=item C<< option_array <opt-char> <index> >>
+
+Displays the value of C<< options[<opt-char>value][<index>] >>.
+
+=item C<< option_array <opt-char> <index> <value> >>
+
+Sets the value of C<< options[<opt-char>value][<index>] >> to C<< <value> >>.
+If there are more than three arguments, the final ones are concatenated into
+C<< <value> >>.
+
+=item C<< option_array_length <opt-char> <index> >>
+
+Returns the length of the C<< <opt-char> >> array (unless the array has been
+manipulated by the programme, this will be the number of times the
+C<< -<opt-char> >> option was passed in).
+
+=item C<< option_array_push <opt-char> <value> >>
+
+Pushes C<< <value> >> on to the C<< <opt-char> >> array.
+
+=back
+
 =back
 
 =head3 Expected format of the comment block
@@ -102,13 +134,15 @@ comment lines, and continues until the first empty line (or line containing only
 spaces or space-like characters).  The "options" section start after a line
 starting with C<# Options:>.  Each option desciption has the form:
 
-  #  -<short name>  --<long name>  <argument>  <description>
+  #  -<short name>  --<long name>  <ARGUMENT>  <description>
   #                                            Default: <default>
 
 The argument and the default line are optional.  The description may span
-multiple lines.
+multiple lines.  The first character of the argument field must be an uppercase
+English letter, and the other characters (if any) must be either an uppercase
+English letter, a numeral, an underscore or a hyphen.
 
-=head3 Passing arguments
+=head3 Passing in the options
 
 When the options are sent to the bash script:
 
@@ -129,6 +163,16 @@ C<--> causes all following arguments to be treated as position parameters, not
 as options, even if they start with a hyphen.
 
 =back
+
+=head3 Repeated options
+
+All options may be passed multiple times.  For options that take arguments, the
+values are pushed on to an array, which can be access using the C<option_array>,
+C<option_array_length> and C<option_array_push> functions.  If an array is
+accessed using the C<option> function, that tail element is returned; meaning
+the last value provided will be returned.  Currently, no special meaning is
+attributed to options that don't take any argument and are passed in multiple
+times.
 
 =head3 Example script - C<process-options-example.sh>
 
@@ -292,10 +336,10 @@ while (<IN>) {
   $help .= $_.$\;                   # Build up the help string, incl new lines
   $is_option = /^\s*Options:/ and next unless $is_option;
   /^(\s*
-    - (?P<short>      \w          )  \s+
-    --(?P<long>       [\w-]+      )  \s+
-      (?P<argument>   [a-z][\w-]* )? \s+
-     )(?<description> \S.*        )
+    - (?P<short>      \w               )  \s+
+    --(?P<long>       [\w-]+           )  \s+
+      (?P<argument>   [A-Z][0-9A-Z_-]* )? \s+
+     )(?<description> \S.*             )
   /x and do {
     $indent = length $1;
     push @options, {};
@@ -331,15 +375,51 @@ for $option (@options) {
 
   # options associative array
   for my $field (@option_fields) {
-    next unless exists $option->{$field};
-    local $_ = $option->{$field};
-    s/\\/\\\\/sg;
-    s/\n/\\n/sg;
-    s/'/\\x27/sg;
-    print qq{options[$option->{'short'}$field]='$_'};
+    if (exists $option->{$field}) {
+      local $_ = $option->{$field};
+      s/\\/\\\\/sg;
+      s/\n/\\n/sg;
+      s/'/\\x27/sg;
+      if ($field eq 'value') {
+        print qq{__options_$option->{'short'}__+=('$_');};
+        print qq{options[$option->{'short'}value]="\${__options_$option->{'short'}__[@]}"};
+      }
+      else {
+        print qq{options[$option->{'short'}$field]='$_'};
+      }
+    }
+    else {
+      # switch options
+      if ($field eq 'value') {
+        print qq{__options_$option->{'short'}__+=(true);};
+      }
+    }
   }
 }
 print <<'SH';
+option_array_length() {
+    eval "echo \${#__options_${1}__[@]}"
+}
+option_array() {
+  case "$#" in
+    0)
+      echo "option_array() needs at least one argument" >&2
+      ;;
+    1)
+      eval 'for i in "${__options_'$1'__[@]}"; do echo "$i"; done'
+      ;;
+    2)
+      eval "echo \"\${__options_${1}__[$2]}\""
+      ;;
+    *)
+      eval "__options_${1}__[$2]"='"${@:3}"'
+      ;;
+  esac
+}
+option_array_push() {
+    eval "__options_${1}__+=(\"\${@:2}\")"
+    eval "options[${1}value]=\"\${__options_${1}__[@]}\""
+}
 option() {
   case "$#" in
     0)
@@ -347,7 +427,7 @@ option() {
       ;;
     1)
       if [[ -v options[${1}value] ]]; then
-        echo ${options[${1}value]}
+        option_array $1 -1
       else
         if [[ ! -v options[${1}argument] ]]; then
           echo false
@@ -355,10 +435,18 @@ option() {
       fi
       ;;
     2)
-      echo ${options[$1$2]}
+      if [ "$2" == "value" ]; then
+        option_array $1 -1
+      else
+        echo ${options[$1$2]}
+      fi
       ;;
     *)
-      options[$1$2]="${@:3}"
+      if [ "$2" == "value" ]; then
+        option_array_push $1 "${@:3}"
+      else
+        options[$1$2]="${@:3}"
+      fi
   esac
 }
 SH
@@ -383,7 +471,7 @@ SH
   }
   elsif (exists $option->{'argument'}) {
     $action = <<SH;
-      options['${key}value']="\$1"
+      option_array_push $key "\$1"
       shift
 SH
   }
