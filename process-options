@@ -377,9 +377,7 @@ for $option (@options) {
   my $action;
   if ($key eq 'h') {
     $action = <<SH;
-      cat <<HELP
-$help
-HELP
+      echo -e '$help'
       exit 0
 SH
   }
