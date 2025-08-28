@@ -131,16 +131,17 @@ This script scans for comment lines that either have a hash symbol ("#")
 followed by a space, or a hash symbol as the only character on the line.  The
 "help" comment block of the file being scanned starts at the first of these
 comment lines, and continues until the first empty line (or line containing only
-spaces or space-like characters).  The "options" section start after a line
-starting with C<# Options:>.  Each option desciption has the form:
+spaces or space-like characters).  The "options" section starts after a line
+starting with C<# Options:> (this is not case sensitive, and the colon can be
+omitted if there are no other non-space characters on the line).  Each option
+desciption has the form:
 
-  #  -<short name>  --<long name>  <ARGUMENT>  <description>
-  #                                            Default: <default>
+  #  -<short name>, --<long name> <ARGUMENT>  <description>
+  #                                           Default: <default>
 
-The argument and the default line are optional.  The description may span
-multiple lines.  The first character of the argument field must be an uppercase
-English letter, and the other characters (if any) must be either an uppercase
-English letter, a numeral, an underscore or a hyphen.
+The argument and the default line are optional, as is the comma between the
+short and long variants.  The description may span multiple lines.  There must
+be at least two spaces between the argument and the description.
 
 =head3 Passing in the options
 
@@ -334,9 +335,9 @@ while (<IN>) {
   $is_comment = /^#(?: |$)(.*)/ or next;    # Move on if this isn't a comment
   $_ = $1;                          # Drop the initial '# '
   $help .= $_.$\;                   # Build up the help string, incl new lines
-  $is_option = /^\s*Options:/ and next unless $is_option;
+  $is_option = /^\s*Options(:|\s*$)/i and next unless $is_option;
   /^(\s*
-    - (?P<short>      \w               )  \s+
+    - (?P<short>      \w               ),?\s+
     --(?P<long>       [\w-]+           )  \s+
       (?P<argument>   [A-Z][0-9A-Z_-]* )? \s+
      )(?<description> \S.*             )
