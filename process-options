@@ -80,6 +80,10 @@ does not contain the key C<< <opt-char>value >>, "false" is displayed for switch
 options (i.e., those that don't take an argument) and nothing is displayed for
 options that do take an argument.
 
+=item C<< option --keys >>
+
+Lists the C<< <opt-char> >>s.
+
 =item C<< option <opt-char> <field> >> (e.g., C<option x description>)
 
 Displays the current value of C<< options[<opt-char><field>] >>.
@@ -369,12 +373,14 @@ print "declare -A options";
 # Build the getopt string and populate the options associative array
 my (@short_options, @long_options);
 for $option (@options) {
+  my $s = $option->{'short'};
   # for the getopt string
   my $arg_indicator = defined $option->{'argument'} ? ':' : '';
-  push @short_options, $option->{'short'}.$arg_indicator;
-  push @long_options , $option->{'long' }.$arg_indicator;
+  push @short_options, $s.$arg_indicator;
+  push @long_options, $option->{'long'}.$arg_indicator;
 
   # options associative array
+  print qq{__options_keys__+=($s);};
   for my $field (@option_fields) {
     if (exists $option->{$field}) {
       local $_ = $option->{$field};
@@ -382,17 +388,17 @@ for $option (@options) {
       s/\n/\\n/sg;
       s/'/\\x27/sg;
       if ($field eq 'value') {
-        print qq{__options_$option->{'short'}__+=('$_');};
-        print qq{options[$option->{'short'}value]="\${__options_$option->{'short'}__[@]}"};
+        print qq{__options_${s}__+=('$_');};
+        print qq{options[${s}value]="\${__options_${s}__[@]}"};
       }
       else {
-        print qq{options[$option->{'short'}$field]='$_'};
+        print qq{options[${s}$field]='$_'};
       }
     }
     else {
       # switch options
       if ($field eq 'value') {
-        print qq{__options_$option->{'short'}__+=(true);};
+        print qq{__options_${s}__+=(true);};
       }
     }
   }
@@ -427,12 +433,12 @@ option() {
       echo ${!options[@]} | tr ' ' '\n' | sort | xargs echo
       ;;
     1)
-      if [[ -v options[${1}value] ]]; then
+      if [ "$1" == "--keys" ]; then
+        echo ${__options_keys__[@]}
+      elif [[ -v options[${1}value] ]]; then
         option_array $1 -1
-      else
-        if [[ ! -v options[${1}argument] ]]; then
-          echo false
-        fi
+      elif [[ ! -v options[${1}argument] ]]; then
+        echo false
       fi
       ;;
     2)
